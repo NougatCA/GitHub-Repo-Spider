@@ -1,6 +1,8 @@
 import os
 import requests
-from subprocess import check_call
+import logging
+import time
+import subprocess
 
 
 class GithubSpider(object):
@@ -14,7 +16,32 @@ class GithubSpider(object):
         dirs = [self.out_dir, self.repo_dir, self.log_dir]
         for d in dirs:
             if not os.path.exists(d):
-                os.makedirs(d)
+                os.mkdir(d)
+
+        # logger
+        self.logger = logging.getLogger()
+        self.logger.setLevel(level=logging.INFO)
+        handler = logging.FileHandler(os.path.join(self.log_dir,
+                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.log')
+        handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+        self.cloned_repo = None
+        self.cloned_repo_id = set()
+        if os.path.exists('cloned_repo.txt'):
+            self.cloned_repo = open('cloned_repo.txt', mode='r+', encoding='utf-8')
+            lines = self.cloned_repo.readlines()
+            for line in lines:
+                if line == '':
+                    continue
+                repo_id, _, _ = line.strip().split(maxsplit=2)
+                self.cloned_repo_id.add(repo_id)
+        else:
+            f = open('cloned_repo.txt', mode='w', encoding='utf-8')
+            f.close()
+            self.cloned_repo = open('cloned_repo.txt', mode='r+', encoding='utf-8')
 
         self.url = 'https://api.github.com/search/repositories?q=language:java&sort=stars'
 
@@ -35,6 +62,7 @@ class GithubSpider(object):
             # request url
             print('\n------------------------------------------------------------')
             print('Requests url:', url)
+            self.logger.info('Requests url: {}'.format(url))
             r = self.requests_get(url)
             assert r.status_code == 200
 
@@ -50,17 +78,30 @@ class GithubSpider(object):
             break
 
     def handle_repo(self, repo):
+        full_name = repo['full_name']
+        stars_count = repo['stargazers_count']
+        description = repo['description']
+        clone_url = repo['clone_url']
         print('\n***************')
-        print('repo:', repo['full_name'])
-        print('stars:', repo['stargazers_count'])
-        print('clone url:', repo['clone_url'])
-        print('description:', repo['description'])
+        print('repo:', full_name)
+        print('stars:', stars_count)
+        print('description:', description)
+        print('clone url:', clone_url)
+        self.logger.info('repo: {}, stars: {}, description: {}'.format(full_name, stars_count, description))
+        self.logger.info('clone url: {}'.format(clone_url))
+
+        repo_id = repo['id']
+        if repo_id in self.cloned_repo_id:
+            print('This repo already cloned.')
+            self.logger.info('This repo already cloned.')
+            return
 
         if not self.contains_java(repo['trees_url']):
             print('This repo does not contain java file.')
+            self.logger.info('This repo does not contain java file.')
             return
 
-        check_call('git clone {}'.format(repo['clone_url']), shell=True, cwd='repos')
+        self.clone_repo(clone_url, repo_id, full_name)
 
     def contains_java(self, tree_url):
         tree_url = tree_url.replace('{/sha}', '/master?recursive=1')
@@ -77,6 +118,35 @@ class GithubSpider(object):
                 return True
         return False
 
+    def clone_repo(self, clone_url, repo_id, full_name):
+        print('Cloning repo...')
+        retry_count = 0
+        while True:
+            try:
+                return_code = subprocess.check_call('git clone {}'.format(clone_url), shell=True, cwd='repos')
+            except subprocess.CalledProcessError as e:
+                print('Return code: ', e.returncode)
+                print('Exception: ', e.output)
+                self.logger.exception('[{}]: {}'.format(e.returncode, e.output))
+
+                if retry_count == 5:
+                    print('Clone failed.')
+                    self.logger.error('Clone failed.')
+                    break
+                retry_count += 1
+                print('Retrying...({}/5)'.format(retry_count))
+            else:
+                if return_code == 0:
+                    print('Clone success.')
+                    self.logger.info('Clone success.')
+                    self.cloned_repo_id.add(repo_id)
+                    self.cloned_repo.write('{} {} {}\n'.format(repo_id, full_name, clone_url))
+                    self.cloned_repo.flush()
+                    break
+                else:
+                    print('Unknown return code: {}, skip this repo.'.format(return_code))
+                    self.logger.exception('Unknown return code: {}, skip this repo.'.format(return_code))
+                    break
 
 
 if __name__ == '__main__':
