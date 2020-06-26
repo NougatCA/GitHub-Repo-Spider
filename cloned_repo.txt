@@ -1,0 +1,4 @@
+132464395 Snailclimb/JavaGuide https://github.com/Snailclimb/JavaGuide.git
+127988011 macrozheng/mall https://github.com/macrozheng/mall.git
+70198875 airbnb/lottie-android https://github.com/airbnb/lottie-android.git
+146633589 alibaba/arthas https://github.com/alibaba/arthas.git

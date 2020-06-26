@@ -3,26 +3,26 @@ import requests
 import logging
 import time
 import subprocess
+import sys
 
 
 class GithubSpider(object):
 
     def __init__(self):
 
-        self.out_dir = 'out/'
         self.repo_dir = 'repos/'
         self.log_dir = 'logs/'
 
-        dirs = [self.out_dir, self.repo_dir, self.log_dir]
+        dirs = [self.repo_dir, self.log_dir]
         for d in dirs:
             if not os.path.exists(d):
-                os.mkdir(d)
+                os.makedirs(d)
 
         # logger
         self.logger = logging.getLogger()
         self.logger.setLevel(level=logging.INFO)
         handler = logging.FileHandler(os.path.join(self.log_dir,
-                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.log')
+                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.spider.log')
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
         handler.setFormatter(formatter)
@@ -53,8 +53,11 @@ class GithubSpider(object):
             'Content-Type': 'application/json'
         }
 
+        if sys.platform.startswith('win'):
+            subprocess.check_call('git config --global core.longpaths true', shell=True, cwd='repos')
+
     def requests_get(self, url):
-        return requests.get(url, headers=self.headers)
+        return requests.get(url, headers=self.headers, verify=False)
 
     def page_iter(self):
         url = self.url
