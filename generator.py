@@ -11,8 +11,12 @@ class DatasetGenerator(object):
             raise IOError('Repo dir not found.')
 
         self.log_dir = 'logs/'
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir)
+        self.java_file_dir = 'java_files/'
+
+        dirs = [self.log_dir, self.java_file_dir]
+        for d in dirs:
+            if not os.path.exists(d):
+                os.makedirs(d)
 
         # continue with the prev work
         if dataset_name:
@@ -25,7 +29,8 @@ class DatasetGenerator(object):
         self.logger = logging.getLogger()
         self.logger.setLevel(level=logging.INFO)
         handler = logging.FileHandler(os.path.join(self.log_dir,
-                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.generator.log')
+                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.generator.log',
+                                      encoding='utf-8')
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
         handler.setFormatter(formatter)
@@ -48,12 +53,6 @@ class DatasetGenerator(object):
             f.close()
             self.finished_repo = open(os.path.join(self.dataset_dir, 'finished_repo.txt'),
                                       mode='r+', encoding='utf-8')
-
-        # dataset file
-        self.monolingual_dataset = open(os.path.join(self.dataset_dir, 'monolingual.dataset'),
-                                        mode='a', encoding='utf-8')
-        self.bilingual_dataset = open(os.path.join(self.dataset_dir, 'bilingual.dataset'),
-                                      mode='a', encoding='utf-8')
 
     def start_generate(self):
         for repo_name in os.listdir(self.repo_dir):

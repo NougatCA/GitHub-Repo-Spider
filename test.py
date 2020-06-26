@@ -14,7 +14,3 @@
 #
 # print(java_files)
 
-
-import os
-
-print(os.listdir('repos/'))

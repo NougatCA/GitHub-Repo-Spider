@@ -8,9 +8,10 @@ import sys
 
 class GithubSpider(object):
 
-    def __init__(self):
+    def __init__(self, year):
+        self.year = year
 
-        self.repo_dir = 'repos/'
+        self.repo_dir = 'repos/{}/'.format(self.year)
         self.log_dir = 'logs/'
 
         dirs = [self.repo_dir, self.log_dir]
@@ -22,7 +23,9 @@ class GithubSpider(object):
         self.logger = logging.getLogger()
         self.logger.setLevel(level=logging.INFO)
         handler = logging.FileHandler(os.path.join(self.log_dir,
-                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) + '.spider.log')
+                                                   time.strftime('%Y%m%d_%H%M%S', time.localtime())) +
+                                      '{}.spider.log'.format(self.year),
+                                      encoding='utf-8')
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
         handler.setFormatter(formatter)
@@ -30,8 +33,8 @@ class GithubSpider(object):
 
         self.cloned_repo = None
         self.cloned_repo_id = set()
-        if os.path.exists('cloned_repo.txt'):
-            self.cloned_repo = open('cloned_repo.txt', mode='r+', encoding='utf-8')
+        if os.path.exists('cloned_repo.{}.txt'.format(self.year)):
+            self.cloned_repo = open('cloned_repo.{}.txt'.format(self.year), mode='r+', encoding='utf-8')
             lines = self.cloned_repo.readlines()
             for line in lines:
                 if line == '':
@@ -39,25 +42,30 @@ class GithubSpider(object):
                 repo_id, _, _ = line.strip().split(maxsplit=2)
                 self.cloned_repo_id.add(repo_id)
         else:
-            f = open('cloned_repo.txt', mode='w', encoding='utf-8')
+            f = open('cloned_repo.{}.txt'.format(self.year), mode='w', encoding='utf-8')
             f.close()
-            self.cloned_repo = open('cloned_repo.txt', mode='r+', encoding='utf-8')
+            self.cloned_repo = open('cloned_repo.{}.txt'.format(self.year), mode='r+', encoding='utf-8')
 
-        self.url = 'https://api.github.com/search/repositories?q=language:java&sort=stars'
+        self.url = 'https://api.github.com/search/repositories?q=language:java+' + \
+                   'created:{}-01-01..{}-12-31&sort=stars'.format(self.year, self.year)
 
         with open('auth.token', mode='r') as f:
             self.auth_token = f.readline()
 
         self.headers = {
             'Authorization': 'token {}'.format(self.auth_token),
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+                          'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+                          'Chrome/83.0.4103.116 Safari/537.36 ' +
+                          'Edg/83.0.478.56'
         }
 
         if sys.platform.startswith('win'):
             subprocess.check_call('git config --global core.longpaths true', shell=True, cwd='repos')
 
     def requests_get(self, url):
-        return requests.get(url, headers=self.headers, verify=False)
+        return requests.get(url, headers=self.headers)
 
     def page_iter(self):
         url = self.url
@@ -77,8 +85,6 @@ class GithubSpider(object):
             if 'next' not in r.links:
                 break
             url = r.links['next']['url']
-
-            break
 
     def handle_repo(self, repo):
         full_name = repo['full_name']
@@ -110,6 +116,11 @@ class GithubSpider(object):
         tree_url = tree_url.replace('{/sha}', '/master?recursive=1')
         r = self.requests_get(tree_url)
         # print(json.dumps(r.json(), indent=4, separators=(', ', ': ')))
+
+        if 'tree' not in r.json():
+            print('Repo tree not found, clone directly.')
+            self.logger.info('Repo tree not found, clone directly.')
+            return True
 
         nodes = r.json()['tree']
         for node in nodes:
@@ -153,5 +164,5 @@ class GithubSpider(object):
 
 
 if __name__ == '__main__':
-    spider = GithubSpider()
+    spider = GithubSpider(2015)
     spider.page_iter()
