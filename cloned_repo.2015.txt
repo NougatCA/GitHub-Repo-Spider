@@ -1,0 +1,2 @@
+32538871 google/gson https://github.com/google/gson.git
+31533997 facebook/fresco https://github.com/facebook/fresco.git

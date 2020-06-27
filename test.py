@@ -14,3 +14,5 @@
 #
 # print(java_files)
 
+for i in range(1, 13):
+    print('{:02d}'.format(i))

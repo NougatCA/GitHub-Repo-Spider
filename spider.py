@@ -11,7 +11,8 @@ class GithubSpider(object):
     def __init__(self, year):
         self.year = year
 
-        self.repo_dir = 'repos/{}/'.format(self.year)
+        self.repo_root = 'repos/{}/'.format(self.year)
+        self.repo_dir = self.repo_root
         self.log_dir = 'logs/'
 
         dirs = [self.repo_dir, self.log_dir]
@@ -46,8 +47,8 @@ class GithubSpider(object):
             f.close()
             self.cloned_repo = open('cloned_repo.{}.txt'.format(self.year), mode='r+', encoding='utf-8')
 
-        self.url = 'https://api.github.com/search/repositories?q=language:java+' + \
-                   'created:{}-01-01..{}-12-31&sort=stars'.format(self.year, self.year)
+        self.url = 'https://api.github.com/search/repositories?' + \
+                   'q=language:java+created:{}-{:02d}&sort=stars&per_page=100'
 
         with open('auth.token', mode='r') as f:
             self.auth_token = f.readline()
@@ -67,8 +68,16 @@ class GithubSpider(object):
     def requests_get(self, url):
         return requests.get(url, headers=self.headers)
 
-    def page_iter(self):
-        url = self.url
+    def start_spider(self):
+        for month in range(1, 13):
+            self.repo_dir = os.path.join(self.repo_root, '{:02d}'.format(month))
+            if not os.path.exists(self.repo_dir):
+                os.makedirs(self.repo_dir)
+            url = self.url.format(self.year, month)
+            self.page_iter(url)
+
+    def page_iter(self, url):
+        break_flag = False
         while True:
             # request url
             print('\n------------------------------------------------------------')
@@ -79,10 +88,14 @@ class GithubSpider(object):
 
             repos = r.json()['items']
             for repo in repos:
-                self.handle_repo(repo)
+                if repo['stargazers_count'] >= 100:
+                    self.handle_repo(repo)
+                else:
+                    break_flag = True
+                    break
 
             # next page
-            if 'next' not in r.links:
+            if 'next' not in r.links or break_flag:
                 break
             url = r.links['next']['url']
 
@@ -137,7 +150,7 @@ class GithubSpider(object):
         retry_count = 0
         while True:
             try:
-                return_code = subprocess.check_call('git clone {}'.format(clone_url), shell=True, cwd='repos')
+                return_code = subprocess.check_call('git clone {}'.format(clone_url), shell=True, cwd=self.repo_dir)
             except subprocess.CalledProcessError as e:
                 print('Return code: ', e.returncode)
                 print('Exception: ', e.output)
@@ -165,4 +178,4 @@ class GithubSpider(object):
 
 if __name__ == '__main__':
     spider = GithubSpider(2015)
-    spider.page_iter()
+    spider.start_spider()
