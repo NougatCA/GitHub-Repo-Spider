@@ -2,6 +2,11 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/repos/2014/01/coursera-android" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/repos/2014/01/j2objc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/repos/2014/01/redisson" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/repos/2015/01/Android-Image-Cropper" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/repos/2015/01/UltimateRecyclerView" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/repos/2015/fresco" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/repos/2015/gson" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/repos/FlycoSystemBar" vcs="Git" />

@@ -4,6 +4,7 @@ import logging
 import time
 import subprocess
 import sys
+import stat
 
 
 class GithubSpider(object):
@@ -47,6 +48,8 @@ class GithubSpider(object):
             f.close()
             self.cloned_repo = open('cloned_repo.{}.txt'.format(self.year), mode='r+', encoding='utf-8')
 
+        self.cloned_year_month = open('cloned_year_month.txt', mode='a+', encoding='utf-8')
+
         self.url = 'https://api.github.com/search/repositories?' + \
                    'q=language:java+created:{}-{:02d}&sort=stars&per_page=100'
 
@@ -75,6 +78,11 @@ class GithubSpider(object):
                 os.makedirs(self.repo_dir)
             url = self.url.format(self.year, month)
             self.page_iter(url)
+            self.cloned_year_month.write('{} {}\n'.format(self.year, month))
+            self.cloned_year_month.flush()
+
+        self.cloned_year_month.close()
+        self.cloned_repo.close()
 
     def page_iter(self, url):
         break_flag = False
@@ -88,7 +96,7 @@ class GithubSpider(object):
 
             repos = r.json()['items']
             for repo in repos:
-                if repo['stargazers_count'] >= 100:
+                if repo['stargazers_count'] >= 100 and not repo['fork']:
                     self.handle_repo(repo)
                 else:
                     break_flag = True
@@ -123,7 +131,7 @@ class GithubSpider(object):
             self.logger.info('This repo does not contain java file.')
             return
 
-        self.clone_repo(clone_url, repo_id, full_name)
+        self.clone_repo(clone_url, repo_id, full_name, repo['name'])
 
     def contains_java(self, tree_url):
         tree_url = tree_url.replace('{/sha}', '/master?recursive=1')
@@ -145,20 +153,22 @@ class GithubSpider(object):
                 return True
         return False
 
-    def clone_repo(self, clone_url, repo_id, full_name):
+    def clone_repo(self, clone_url, repo_id, full_name, name):
         print('Cloning repo...')
         retry_count = 0
         while True:
             try:
-                return_code = subprocess.check_call('git clone {}'.format(clone_url), shell=True, cwd=self.repo_dir)
+                return_code = subprocess.check_call('git clone {} {}/'.format(clone_url, name),
+                                                    shell=True, cwd=self.repo_dir)
             except subprocess.CalledProcessError as e:
                 print('Return code: ', e.returncode)
                 print('Exception: ', e.output)
                 self.logger.exception('[{}]: {}'.format(e.returncode, e.output))
+                self.delete_dir(name)
 
                 if retry_count == 5:
-                    print('Clone failed.')
-                    self.logger.error('Clone failed.')
+                    print('Clone failed. Skip this repo')
+                    self.logger.error('Clone failed. Skip this repo')
                     break
                 retry_count += 1
                 print('Retrying...({}/5)'.format(retry_count))
@@ -169,13 +179,60 @@ class GithubSpider(object):
                     self.cloned_repo_id.add(repo_id)
                     self.cloned_repo.write('{} {} {}\n'.format(repo_id, full_name, clone_url))
                     self.cloned_repo.flush()
+
+                    # delete repo files except java file
+                    self.delete_repo_files(name)
+                    print('Deleted non-java files.')
+                    self.logger.info('Deleted non-java files.')
+
                     break
                 else:
                     print('Unknown return code: {}, skip this repo.'.format(return_code))
                     self.logger.exception('Unknown return code: {}, skip this repo.'.format(return_code))
+                    self.delete_dir(name)
                     break
+
+    def delete_repo_files(self, repo_dir):
+        # delete repo files except java file
+        d = os.path.join(self.repo_dir, repo_dir)
+        for root, _, files in os.walk(d):
+            for file in files:
+                if not file.endswith('.java'):
+                    try:
+                        os.chmod(os.path.join(root, file), stat.S_IWRITE)
+                        os.remove(os.path.join(root, file))
+                    except OSError:
+                        self.logger.error('{} delete failed.'.format(os.path.join(root, file)))
+        # clean empty dirs
+        for root, dirs, files in os.walk(d, topdown=False):
+            for item in dirs:
+                d = os.path.join(root, item)
+                try:
+                    os.rmdir(d)
+                except OSError:
+                    continue
+
+    def delete_dir(self, repo_dir):
+        # delete repo dir
+        d = os.path.join(self.repo_dir, repo_dir)
+        if not os.path.exists(d):
+            return
+        for root, dirs, files in os.walk(d, topdown=False):
+            for name in files:
+                try:
+                    os.chmod(os.path.join(root, name), stat.S_IWRITE)
+                    os.remove(os.path.join(root, name))
+                except OSError:
+                    self.logger.error('{} delete failed.'.format(os.path.join(root, name)))
+            for name in dirs:
+                try:
+                    os.rmdir(os.path.join(root, name))
+                except OSError:
+                    self.logger.error('{} delete failed.'.format(os.path.join(root, name)))
+        os.rmdir(d)
 
 
 if __name__ == '__main__':
-    spider = GithubSpider(2015)
-    spider.start_spider()
+    for year in [2014, 2015, 2016, 2017, 2018]:
+        spider = GithubSpider(year)
+        spider.start_spider()
